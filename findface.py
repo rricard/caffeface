@@ -67,11 +67,11 @@ def test_tile(tile, threshold = THRESHOLD, caffe_net = CAFFE_NET, pos_matches_ou
     # Save images and return the results of the test
     if out['loss'][0][1] > threshold:
         Image.fromarray(image).convert('RGB').save(pos_matches_out % (imwriter_counter))
-        imwriter_counter ++
+        imwriter_counter += 1
         return true
     else:
         Image.fromarray(image).convert('RGB').save(neg_matches_out % (imwriter_counter))
-        imwriter_counter ++
+        imwriter_counter += 1
         return false
 
 # Find faces in a scaled image, ouputs an array of detected rects
