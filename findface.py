@@ -10,17 +10,19 @@ COMPILED_MODEL = "facenet_iter_200000.caffemodel"
 
 CURSOR_LENGTH = 36
 CURSOR_HEIGHT = 36
-THRESHOLD = 0.9
+THRESHOLD = 0.75
 
 POSITIVE_MATCHES_OUTPUT = 'out/%d-face.pgm'
 NEGATIVE_MATCHES_OUTPUT = 'out/%d-noface.pgm'
+OUTPUT = 'out/faces.pgm'
 
 SCALES = np.arange(1.2, 0.2, -0.2)
 
 caffe.set_mode_cpu()
 CAFFE_NET = caffe.Net(NET_PROTOBUF, COMPILED_MODEL, caffe.TEST)
 
-INPUT = np.array(Image.open(INPUT_IMAGE).convert('RGB'))
+IMAGE = Image.open(INPUT_IMAGE).convert('RGB')
+INPUT = np.array(IMAGE)
 
 imwriter_counter = 0
 
@@ -49,30 +51,37 @@ def gen_tiles(input, cursor_length = CURSOR_LENGTH, cursor_height = CURSOR_HEIGH
         x_window_offsets
     )
     # Concatenate the tiles line by line
-    return np.concatenate(tiles)
+    tiles = np.concatenate(tiles)
+    # Filter out the illegal sizes
+    return filter(lambda tile:
+      len(tile['image'][0]) == CURSOR_LENGTH and
+      len(tile['image']) == CURSOR_HEIGHT,
+      tiles
+    )
 
 # Test if a tile contains a face and saves it as a training set
 def test_tile(tile, threshold = THRESHOLD, caffe_net = CAFFE_NET, pos_matches_out = POSITIVE_MATCHES_OUTPUT, neg_matches_out = NEGATIVE_MATCHES_OUTPUT):
+    global imwriter_counter
     # Spread the tile
     image = tile['image']
     rect = tile['rect']
     # Shape a net input
     nn_input = image[np.newaxis, np.newaxis, :, :]
     # Load data into the net
-    caffe_net.blobs['data'].reshape(*nn_imput.shape)
+    caffe_net.blobs['data'].reshape(*nn_input.shape)
     caffe_net.blobs['data'].data[...] = nn_input
     # Test with a simple net forwarding
-    out = net.forward()
+    out = caffe_net.forward()
 
     # Save images and return the results of the test
     if out['loss'][0][1] > threshold:
         Image.fromarray(image).convert('RGB').save(pos_matches_out % (imwriter_counter))
         imwriter_counter += 1
-        return true
+        return True
     else:
         Image.fromarray(image).convert('RGB').save(neg_matches_out % (imwriter_counter))
         imwriter_counter += 1
-        return false
+        return False
 
 # Find faces in a scaled image, ouputs an array of detected rects
 def find_in_scale(scaled_input, cursor_length = CURSOR_LENGTH, cursor_height = CURSOR_HEIGHT, threshold = THRESHOLD, caffe_net = CAFFE_NET):
@@ -105,19 +114,19 @@ def scale_find_unscale(original_input = INPUT, scale = 1, cursor_length = CURSOR
     return map(lambda rect: map(lambda value: value/scale, rect), matches)
 
 # Find faces in an image at all scales, ouputs an array of detected rects
-def find_in_image(input = INPUT, scale = SCALES, cursor_length = CURSOR_LENGTH, cursor_height = CURSOR_HEIGHT, threshold = THRESHOLD, caffe_net = CAFFE_NET):
+def find_in_image(input = INPUT, scales = SCALES, cursor_length = CURSOR_LENGTH, cursor_height = CURSOR_HEIGHT, threshold = THRESHOLD, caffe_net = CAFFE_NET):
     # Gather results for all scales
     results = map(lambda scale: scale_find_unscale(input, scale, cursor_height, cursor_length, threshold, caffe_net), scales)
     # Merge results inside a single table
     return np.concatenate(results)
 
 # Trace green rects on the image
-def trace_rects(rects, original_input = INPUT):
+def trace_rects(rects, original_image = IMAGE):
     # Create an image context
-    draw = ImageDraw.Draw(image)
+    draw = ImageDraw.Draw(original_image)
     # Draw on it
     map(lambda rect: draw.rectangle(rect[0], rect[1], rect[2], rect[3], fill=None, outline="green"), rects)
 
 rects = find_in_image()
 trace_rects(rects)
-INPUT.show()
+IMAGE.save(OUTPUT)
